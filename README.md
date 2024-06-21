@@ -1,7 +1,7 @@
 # Step-aware Preference Optimization: Aligning Preference with Denoising Performance at Each Step
  [Zhanhao Liang](https://github.com/RockeyCoss), [Yuhui Yuan](https://www.microsoft.com/en-us/research/people/yuyua/), [Shuyang Gu](https://cientgu.github.io), [Bohan Chen](https://github.com/BHCHENGIT), [Tiankai Hang](https://tiankaihang.github.io/), [Ji Li](https://sites.google.com/a/usc.edu/jili/), [Liang Zheng](https://zheng-lab.cecs.anu.edu.au)
  
-<a href=""><img src="https://img.shields.io/badge/Paper-arXiv-red?style=for-the-badge" height=22.5></a>
+<a href="https://arxiv.org/abs/2406.04314"><img src="https://img.shields.io/badge/Paper-arXiv-red?style=for-the-badge" height=22.5></a>
 <a href="https://rockeycoss.github.io/spo.github.io/"><img src="https://img.shields.io/badge/Project-Page-blue?style=for-the-badge" height=22.5></a>
 <a href="https://huggingface.co/SPO-Diffusion-Models"><img src="https://img.shields.io/badge/Hugging-Face-yellow?style=for-the-badge" height=22.5></a>
 
@@ -9,6 +9,10 @@
 This is the official implementation of SPO, introduced in [Step-aware Preference Optimization: Aligning Preference with Denoising Performance at Each Step]().
 
 ## News
+**2024.06.21** Release the training code of SPO.
+
+**2024.06.20** Release the SD v1.5 checkpoint and inference code.
+
 **2024.06.07** Release the SDXL checkpoint and inference code. 
 
 
@@ -29,7 +33,7 @@ Our experiments with Stable Diffusion v1.5 and SDXL demonstrate that SPO signifi
 ![method_overview](assets/method.png)
 
 ## TODO
-- [ ] Release training code
+- [x] Release training code
 - [x] Release checkpoints and inference code
 - [x] Initialization
 
@@ -67,28 +71,78 @@ Our experiments with Stable Diffusion v1.5 and SDXL demonstrate that SPO signifi
   </tr>
 </table>
 
-
 ## :wrench: Installation
 
-```
+```bash
 sudo docker pull pytorch/pytorch:2.2.0-cuda12.1-cudnn8-devel
 
 pip install -r requirements.txt
 ```
-
-## :wrench: Inference
-
-
+(Optional) To customize the location for saving models downloaded from Hugging Face, you can use the following command:
+```bash
+export HUGGING_FACE_CACHE_DIR=/path/to/your/cache/dir
 ```
-python inference_spo_sdxl.py
+
+## :wrench: Inference Hugging Face Checkpoints
+
+SDXL inference
+```bash
+PYTHONPATH=$(pwd) python inference_scripts/inference_spo_sdxl.py
+```
+
+SD v1.5 inference
+```bash
+PYTHONPATH=$(pwd) python inference_scripts/inference_spo_sd-v1-5.py
+```
+
+## :wrench: Training
+The following scripts assume the use of four 80GB A100 GPUs for fine-tuning, as described in the [paper](https://arxiv.org/abs/2406.04314).
+
+Before fine-tuning, please download the checkpoints of step-aware preference models. You can do this by following these steps:
+```bash
+sudo apt update
+sudo apt install wget
+
+mkdir model_ckpts
+cd model_ckpts
+
+wget https://huggingface.co/SPO-Diffusion-Models/Step-Aware_Preference_Models/resolve/main/sd-v1-5_step-aware_preference_model.bin
+
+wget https://huggingface.co/SPO-Diffusion-Models/Step-Aware_Preference_Models/resolve/main/sdxl_step-aware_preference_model.bin
+
+cd ..
+```
+
+To fine-tune SD v1.5, you can use the following command:
+```bash
+PYTHONPATH=$(pwd) accelerate launch --config_file accelerate_cfg/1m4g_fp16.yaml train_scripts/train_spo.py --config configs/spo_sd-v1-5_4k-prompts_num-sam-4_10ep_bs10.py
+```
+To fine-tune SDXL, you can use the following command:
+```bash
+PYTHONPATH=$(pwd) accelerate launch --config_file accelerate_cfg/1m4g_fp16.yaml train_scripts/train_spo_sdxl.py --config configs/spo_sdxl_4k-prompts_num-sam-2_3-is_10ep_bs2_gradacc2.py
 ```
 
 ## :unlock: Available Checkpoints
 
 [SPO-SDXL_4k-prompts_10-epochs](https://huggingface.co/SPO-Diffusion-Models/SPO-SDXL_4k-p_10ep)
 
+[SPO-SDXL_4k-prompts_10-epochs_LoRA](https://huggingface.co/SPO-Diffusion-Models/SPO-SDXL_4k-p_10ep_LoRA)
+
+[SPO-SD-v1-5_4k-prompts_10-epochs](https://huggingface.co/SPO-Diffusion-Models/SPO-SD-v1-5_4k-p_10ep)
+
+[SPO-SD-v1-5_4k-prompts_10-epochs_LoRA](https://huggingface.co/SPO-Diffusion-Models/SPO-SD-v1-5_4k-p_10ep_LoRA)
+
+## Acknowledgement
+Our codebase references the code from [Diffusers](https://github.com/huggingface/diffusers), [D3PO](https://github.com/yk7333/d3po) and [PickScore](https://github.com/yuvalkirstain/PickScore). We extend our gratitude to their authors for open-sourcing their code.
+
 ## :mailbox_with_mail: Citation
 If you find this code useful in your research, please consider citing:
 
 ```
+@article{liang2024step,
+  title={Step-aware Preference Optimization: Aligning Preference with Denoising Performance at Each Step},
+  author={Liang, Zhanhao and Yuan, Yuhui and Gu, Shuyang and Chen, Bohan and Hang, Tiankai and Li, Ji and Zheng, Liang},
+  journal={arXiv preprint arXiv:2406.04314},
+  year={2024}
+}
 ```

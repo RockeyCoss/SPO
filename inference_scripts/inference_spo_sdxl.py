@@ -1,6 +1,7 @@
 import argparse
 import torch
 from diffusers import StableDiffusionXLPipeline, AutoencoderKL
+from spo.utils import huggingface_cache_dir
 
 def main():
     parser = argparse.ArgumentParser()
@@ -32,10 +33,12 @@ def main():
     pipe = StableDiffusionXLPipeline.from_pretrained(
         ckpt_id, 
         torch_dtype=inference_dtype,
+        cache_dir=huggingface_cache_dir,
     )
     vae = AutoencoderKL.from_pretrained(
         'madebyollin/sdxl-vae-fp16-fix',
         torch_dtype=inference_dtype,
+        cache_dir=huggingface_cache_dir,
     )
     pipe.vae = vae
     pipe.to(args.device)
