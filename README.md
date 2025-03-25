@@ -1,10 +1,14 @@
+<div align="center">
+
 # Aesthetic Post-Training Diffusion Models from Generic Preferences with Step-by-step Preference Optimization
  [Zhanhao Liang](https://github.com/RockeyCoss), [Yuhui Yuan](https://www.microsoft.com/en-us/research/people/yuyua/), [Shuyang Gu](https://cientgu.github.io), [Bohan Chen](https://github.com/BHCHENGIT), [Tiankai Hang](https://tiankaihang.github.io/), [Mingxi Cheng](https://sites.google.com/a/usc.edu/mingxicheng/), [Ji Li](https://sites.google.com/a/usc.edu/jili/), [Liang Zheng](https://zheng-lab.cecs.anu.edu.au)
  
+ ${{\color{Red}\Huge{\textsf{  CVPR\ 2025\ \}}}}\$
+
 <a href="https://arxiv.org/abs/2406.04314"><img src="https://img.shields.io/badge/Paper-arXiv-red?style=for-the-badge" height=22.5></a>
 <a href="https://rockeycoss.github.io/spo.github.io/"><img src="https://img.shields.io/badge/Project-Page-blue?style=for-the-badge" height=22.5></a>
 <a href="https://huggingface.co/SPO-Diffusion-Models"><img src="https://img.shields.io/badge/Hugging-Face-yellow?style=for-the-badge" height=22.5></a>
-
+</div>
 
 This is the official implementation of SPO, introduced in [Aesthetic Post-Training Diffusion Models from Generic Preferences with Step-by-step Preference Optimization](https://arxiv.org/abs/2406.04314).
 
@@ -24,18 +28,18 @@ This is the official implementation of SPO, introduced in [Aesthetic Post-Traini
     2) use a step-aware preference model to find a suitable win-lose pair to supervise the diffusion model, and 
     3) randomly select one from the pool to initialize the next denoising step. 
     This strategy ensures that diffusion models focus on the subtle, fine-grained visual differences 
-    instead of layout aspect. We find that aesthetic can be significantly enhanced by accumulating these 
+    instead of layout aspect. We find that aesthetics can be significantly enhanced by accumulating these 
     improved minor differences.
 </p>
 <p>
     When fine-tuning Stable Diffusion v1.5 and SDXL, SPO yields significant 
     improvements in aesthetics compared with existing DPO methods while not sacrificing image-text alignment 
-    compared with vanilla models. Moreover, SPO converges much faster than DPO methods due to the step-by-step 
-    alignment of fine-grained visual details.
+    compared with vanilla models. Moreover, SPO converges much faster than DPO methods due to the use of 
+    more correct preference labels provided by the step-aware preference model.                       
 </p>
 
 ## Method Overview
-![method_overview](assets/method.png)
+![method_overview](assets/method.jpg)
 
 ## TODO
 - [x] Release training code for step-aware preference model
