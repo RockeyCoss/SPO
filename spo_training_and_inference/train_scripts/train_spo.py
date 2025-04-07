@@ -1,7 +1,14 @@
 from functools import partial
-import copy
 import os
+import os.path as osp
 import sys
+# Add the project directory to the Python path to simplify imports without manually setting PYTHONPATH.
+sys.path.insert(
+    0, osp.abspath(
+        osp.join(osp.dirname(osp.abspath(__file__)), "..")
+    ),
+)
+import copy
 import contextlib
 import math
 import json
@@ -10,8 +17,6 @@ import tqdm
 import torch
 import wandb
 
-script_path = os.path.abspath(__file__)
-sys.path.append(os.path.dirname(os.path.dirname(script_path)))
 from absl import app, flags
 from ml_collections import config_flags
 from mmengine.config import Config

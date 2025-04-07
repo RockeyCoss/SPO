@@ -11,6 +11,13 @@ sudo docker pull rockeycoss/spo:v1
 ```bash
 sudo docker run --gpus all -it --ipc=host rockeycoss/spo:v1 /bin/bash
 ```
+> 💡 Optional (for installation without Docker):
+> You can also build the environment using the provided `environment.yaml`:
+> ```bash
+> conda env create -f environment.yaml --name spo
+> conda activate spo
+> ```
+> 🔹 *Both setups are supported, but the Docker environment (`rockeycoss/spo:v1`) should be taken as the reference.*
 3. Clone the Repository
 ```bash
 git clone https://github.com/RockeyCoss/SPO
@@ -29,12 +36,12 @@ export HUGGING_FACE_CACHE_DIR=/path/to/your/cache/dir
 
 SDXL inference
 ```bash
-PYTHONPATH=$(pwd) python inference_scripts/inference_spo_sdxl.py
+python inference_scripts/inference_spo_sdxl.py
 ```
 
 SD v1.5 inference
 ```bash
-PYTHONPATH=$(pwd) python inference_scripts/inference_spo_sd-v1-5.py
+python inference_scripts/inference_spo_sd-v1-5.py
 ```
 
 ## :wrench: Training
@@ -57,11 +64,11 @@ cd ..
 
 To fine-tune SD v1.5, you can use the following command:
 ```bash
-PYTHONPATH=$(pwd) accelerate launch --config_file accelerate_cfg/1m4g_fp16.yaml train_scripts/train_spo.py --config configs/spo_sd-v1-5_4k-prompts_num-sam-4_10ep_bs10.py
+accelerate launch --config_file accelerate_cfg/1m4g_fp16.yaml train_scripts/train_spo.py --config configs/spo_sd-v1-5_4k-prompts_num-sam-4_10ep_bs10.py
 ```
 To fine-tune SDXL, you can use the following command:
 ```bash
-PYTHONPATH=$(pwd) accelerate launch --config_file accelerate_cfg/1m4g_fp16.yaml train_scripts/train_spo_sdxl.py --config configs/spo_sdxl_4k-prompts_num-sam-2_3-is_10ep_bs2_gradacc2.py
+accelerate launch --config_file accelerate_cfg/1m4g_fp16.yaml train_scripts/train_spo_sdxl.py --config configs/spo_sdxl_4k-prompts_num-sam-2_3-is_10ep_bs2_gradacc2.py
 ```
 To fine-tune using step-aware preference model checkpoints you’ve trained with the code in [step_aware_preference_model](https://github.com/RockeyCoss/SPO/tree/main/step_aware_preference_model), you can simply update the `config.preference_model_func_cfg.ckpt_path` setting in the config file to point to your desired checkpoint path. For example, you can modify [this line](https://github.com/RockeyCoss/SPO/blob/main/spo_training_and_inference/configs/spo_sdxl_4k-prompts_num-sam-2_3-is_10ep_bs2_gradacc2.py#L15) in the SDXL fine-tuning config.
 

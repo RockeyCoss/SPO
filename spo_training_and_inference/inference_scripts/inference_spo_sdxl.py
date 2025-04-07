@@ -1,4 +1,12 @@
 import argparse
+import os.path as osp
+import sys
+# Add the project directory to the Python path to simplify imports without manually setting PYTHONPATH.
+sys.path.insert(
+    0, osp.abspath(
+        osp.join(osp.dirname(osp.abspath(__file__)), "..")
+    ),
+)
 import torch
 from diffusers import StableDiffusionXLPipeline, AutoencoderKL
 from spo.utils import huggingface_cache_dir
