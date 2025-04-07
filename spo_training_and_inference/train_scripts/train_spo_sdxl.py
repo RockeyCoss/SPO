@@ -20,7 +20,7 @@ from accelerate.utils import set_seed, ProjectConfiguration, broadcast
 from accelerate.logging import get_logger
 from diffusers import StableDiffusionXLPipeline, DDIMScheduler, UNet2DConditionModel, AutoencoderKL
 from diffusers.training_utils import cast_training_params
-from diffusers.utils import convert_state_dict_to_diffusers
+from diffusers.utils import convert_state_dict_to_diffusers, convert_unet_state_dict_to_peft
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
 from peft import LoraConfig
 from peft.utils import (
@@ -33,7 +33,6 @@ from spo.datasets import build_dataset
 from spo.utils import (
     huggingface_cache_dir, 
     UNET_CKPT_NAME, 
-    UNET_LORA_CKPT_NAME,
     gather_tensor_with_diff_shape,
 )
 from spo.custom_diffusers import (
@@ -78,19 +77,20 @@ def main(_):
     )
 
     accelerator = Accelerator(
-        log_with="wandb",
+        log_with="wandb" if not getattr(config, 'debug', False) else None,
         project_config=accelerator_config,
         gradient_accumulation_steps=config.train.gradient_accumulation_steps,
     )
     if accelerator.is_main_process:
-        accelerator.init_trackers(
-            project_name=config.wandb_project_name, 
-            config=config, 
-            init_kwargs={"wandb": {
-                "name": config.run_name, 
-                "entity": config.wandb_entity_name
-            }}
-        )
+        if not getattr(config, 'debug', False):
+            accelerator.init_trackers(
+                project_name=config.wandb_project_name, 
+                config=config, 
+                init_kwargs={"wandb": {
+                    "name": config.run_name, 
+                    "entity": config.wandb_entity_name
+                }}
+            )
         os.makedirs(os.path.join(config.logdir, config.run_name), exist_ok=True)
         with open(os.path.join(config.logdir, config.run_name, "exp_config.py"), "w") as f:
             f.write(config.pretty_text)
@@ -189,11 +189,17 @@ def main(_):
         assert len(models) == 1
         if isinstance(models[0], type(accelerator.unwrap_model(unet))):
             if config.use_lora:
-                unet_lora_layers_to_save = get_peft_model_state_dict(models[0])
-                torch.save(unet_lora_layers_to_save, os.path.join(output_dir, UNET_LORA_CKPT_NAME))
-                logger.info(f"saved unet_lora_layers_to_save to {os.path.join(output_dir, UNET_LORA_CKPT_NAME)}")
+                unet_lora_layers_to_save = convert_state_dict_to_diffusers(
+                    get_peft_model_state_dict(models[0])
+                )
+                StableDiffusionXLPipeline.save_lora_weights(
+                    output_dir,
+                    unet_lora_layers=unet_lora_layers_to_save,
+                )
+                logger.info(f"saved lora weights to {output_dir}")
             else:
                 models[0].save_pretrained(os.path.join(output_dir, UNET_CKPT_NAME))
+                logger.info(f"saved weights to {os.path.join(output_dir, UNET_CKPT_NAME)}")
         else:
             raise ValueError(f"Unknown model type {type(models[0])}")
         weights.pop()  # ensures that accelerate doesn't try to handle saving of the model
@@ -202,16 +208,27 @@ def main(_):
         assert len(models) == 1
         if isinstance(models[0], type(accelerator.unwrap_model(unet))):
             if config.use_lora:
-                unet_lora_layers_para = torch.load(os.path.join(input_dir, UNET_LORA_CKPT_NAME), map_location='cpu')
-                incompatible_keys = set_peft_model_state_dict(models[0], unet_lora_layers_para, adapter_name="default")
-                if getattr(incompatible_keys, 'unexpected_keys', []) == []:
-                    logger.info(f"loaded unet_lora_layers_para from {os.path.join(input_dir, UNET_LORA_CKPT_NAME)}")
-                else:
-                    logger.warning(f"unet_lora_layers has unexpected_keys: {getattr(incompatible_keys, 'unexpected_keys', None)}")
+                lora_state_dict, network_alphas = StableDiffusionXLPipeline.lora_state_dict(input_dir)
+                unet_state_dict = {f'{k.replace("unet.", "")}': v for k, v in lora_state_dict.items() if k.startswith("unet.")}
+                unet_state_dict = convert_unet_state_dict_to_peft(unet_state_dict)
+                incompatible_keys = set_peft_model_state_dict(models[0], unet_state_dict, adapter_name="default")
+                if incompatible_keys is not None:
+                    # check only for unexpected keys
+                    unexpected_keys = getattr(incompatible_keys, "unexpected_keys", None)
+                    if unexpected_keys:
+                        logger.warning(
+                            f"Loading adapter weights from state_dict led to unexpected keys not found in the model: "
+                            f" {unexpected_keys}. "
+                        )
+                if accelerator.mixed_precision == "fp16":
+                    # only upcast trainable parameters (LoRA) into fp32
+                    cast_training_params([models[0]], dtype=torch.float32)
+                logger.info(f"loaded lora weights from {input_dir}")                
             else:
                 load_model = UNet2DConditionModel.from_pretrained(input_dir, subfolder=UNET_CKPT_NAME)
                 models[0].register_to_config(**load_model.config)
                 models[0].load_state_dict(load_model.state_dict())
+                logger.info(f"loaded weights from {input_dir}")                
                 del load_model
         else:
             raise ValueError(f"Unknown model type {type(models[0])}")
@@ -316,12 +333,22 @@ def main(_):
         train_loss = 0.0
         train_ratio_win = 0.0
         train_ratio_lose = 0.0
-        for batch in tqdm(
-            data_loader, 
+        for dataset_batch_idx, batch in tqdm(
+            enumerate(data_loader),
+            total=len(data_loader),
             disable=not accelerator.is_local_main_process,
             desc="Batch",
             position=1,
         ):
+            if (
+                dataset_batch_idx == len(data_loader) - 1 and 
+                accelerator.gradient_state.in_dataloader
+            ):
+                # After sampling, we need to iterate through training batches.
+                # If 'end_of_dataloader' is True, accelerator.accumulate will skip gradient accumulation.
+                # Hence, we set it to False to ensure proper gradient accumulation.
+                accelerator.gradient_state.active_dataloader.end_of_dataloader = False
+
             #################### SAMPLING ####################
             unet.eval()
             pipeline.unet.eval()
@@ -406,7 +433,7 @@ def main(_):
             if accelerator.num_processes > 1:
                 accelerator.wait_for_everyone()
                 local_valid_samples_num_list = [
-                    torch.tensor([next_latents.shape[0]], dtype=torch.int, device=accelerator.device) 
+                    torch.tensor([next_latents.shape[0]], dtype=torch.long, device=accelerator.device) 
                     for _ in range(accelerator.num_processes)
                 ]
                 for process_idx in range(accelerator.num_processes):
@@ -446,7 +473,7 @@ def main(_):
             else:
                 valid_perm = torch.ones(
                     total_valid_samples_num,
-                    dtype=torch.int,
+                    dtype=torch.long,
                     device=accelerator.device,
                 ) * -1
                 accelerator.wait_for_everyone()
@@ -673,7 +700,13 @@ def main(_):
                     train_loss = 0.0
                     train_ratio_win = 0.0
                     train_ratio_lose = 0.0
-        
+
+            if (
+                dataset_batch_idx == len(data_loader) - 1 and 
+                accelerator.gradient_state.in_dataloader
+            ):
+                accelerator.gradient_state.active_dataloader.end_of_dataloader = True
+
         ########## save ckpt and evaluation ##########
         if accelerator.is_main_process:
             if (epoch + 1) % config.save_interval == 0:
